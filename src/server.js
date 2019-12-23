@@ -121,14 +121,13 @@ app.use(bodyParser.json());
 // );
 
 app.use(
-  postgraphile("postgres:///peerRating",
+  postgraphile("shubham:///peerRating",
     "public",
     {
       watchPg: true,
       graphiql: true,
       enhanceGraphiql: true,
       dynamicJson: true,
-      graphiql: true,
       jwtPgTypeIdentifier: 'public.jwt_token',
       jwtSecret: 'ABHD4537BS',
       pgDefaultRole: 'anonymous',
@@ -138,18 +137,30 @@ app.use(
         makeWrapResolversPlugin({
           SigninPayload: {
             jwtToken: {
-            //   SigninPayload: {
                 async resolve(resolver, user, args, context, _resolveInfo) {
                   const jwtToken = await resolver();
-                  console.log(_resolveInfo);
                   const expiresIn = 60 * 60 * 24 * 180; // 180 days
+                  console.log("this is the token----------",jwtToken)
+                  console.log("But this ain't signed ----------------------------------");
                   // const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYWRtaW4iLCJ1c2VyX2lkIjo2LCJuYW1lIjoic2h1YmhhbSIsImlhdCI6MTU2NTcyODYzNSwiZXhwIjoxNTY1ODE1MDM1LCJhdWQiOiJwb3N0Z3JhcGhpbGUiLCJpc3MiOiJwb3N0Z3JhcGhpbGUifQ.m1085Brj0eLBKdeu4ky7R33V7gSX-0sEchXzBDLdZeM"
-                  // context.res.cookie('id_token', token, { maxAge: 1000 * expiresIn, httpOnly: true });
+                  // context.res.cookie('id_token', jwtToken, { maxAge: 1000 * expiresIn, httpOnly: true });
                   return jwtToken
                 },
               },
             },
-          // }
+          User: {
+            password: {
+              async resolve(resolver, user, args, context, _resolveInfo) {
+                const password = await resolver();
+                //user here contain the user data from db along password, have to be carefull
+                // console.log("this is the password", password);
+                // console.log("this is the fucking user", user);
+                // console.log("this is the fucking args", args);
+                // console.log("this is the constext", context);
+                return "Not Allowed"
+              },
+            },
+          },
         }),
 
       ],
