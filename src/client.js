@@ -7,99 +7,159 @@
  * LICENSE.txt file in the root directory of this source tree.
  */
 
+import 'whatwg-fetch';
 import React from 'react';
-import PropTypes from 'prop-types';
-import withStyles from 'isomorphic-style-loader/lib/withStyles';
-import s from './Login.css';
+import ReactDOM from 'react-dom';
+import deepForceUpdate from 'react-deep-force-update';
+import queryString from 'query-string';
+import { createPath } from 'history';
+import App from './components/App';
+import createFetch from './createFetch';
+import history from './history';
+import { updateMeta } from './DOMUtils';
+import router from './router';
 
-class Login extends React.Component {
-  static propTypes = {
-    title: PropTypes.string.isRequired,
+
+// Global (context) variables that can be easily accessed from any React component
+// https://facebook.github.io/react/docs/context.html
+const context = {
+  // Enables critical path CSS rendering
+  // https://github.com/kriasoft/isomorphic-style-loader
+  insertCss: (...styles) => {
+    // eslint-disable-next-line no-underscore-dangle
+    const removeCss = styles.map(x => x._insertCss());
+    return () => {
+      removeCss.forEach(f => f());
+    };
+  },
+  // Universal HTTP client
+  fetch: createFetch(fetch, {
+    baseUrl: window.App.apiUrl,
+  }),
+};
+
+const container = document.getElementById('app');
+let currentLocation = history.location;
+let appInstance;
+
+const scrollPositionsHistory = {};
+
+// Re-render the app when window.location changes
+async function onLocationChange(location, action) {
+  // Remember the latest scroll position for the previous location
+  scrollPositionsHistory[currentLocation.key] = {
+    scrollX: window.pageXOffset,
+    scrollY: window.pageYOffset,
   };
-  static contextTypes = { fetch: PropTypes.func.isRequired };
-
-   getCookie(cname) {
-    var name = cname + "=";
-    var decodedCookie = decodeURIComponent(document.cookie);
-    var ca = decodedCookie.split(';');
-    for(var i = 0; i <ca.length; i++) {
-      var c = ca[i];
-      while (c.charAt(0) == ' ') {
-        c = c.substring(1);
-      }
-      if (c.indexOf(name) == 0) {
-        return c.substring(name.length, c.length);
-      }
-    }
-    return "";
+  // Delete stored scroll position for next page if any
+  if (action === 'PUSH') {
+    delete scrollPositionsHistory[location.key];
   }
+  currentLocation = location;
 
-  handleSubmit = async () => {
-    let options = {
-      body: JSON.stringify({
-        query:`mutation {
-          signup(input: {username: "shubham", email: "shubham.gupta@zyloto.com", password: "1234567", userType: "admin"}) {
-            jwtToken
+  const isInitialRender = !action;
+  try {
+    context.pathname = location.pathname;
+    context.query = queryString.parse(location.search);
+
+    // Traverses the list of routes in the order they are defined until
+    // it finds the first route that matches provided URL path string
+    // and whose action method returns anything other than `undefined`.
+    const route = await router.resolve(context);
+
+    // Prevent multiple page renders during the routing process
+    if (currentLocation.key !== location.key) {
+      return;
+    }
+
+    if (route.redirect) {
+      history.replace(route.redirect);
+      return;
+    }
+
+    const renderReactApp = isInitialRender ? ReactDOM.hydrate : ReactDOM.render;
+    appInstance = renderReactApp(
+      <App context={context}>{route.component}</App>,
+      container,
+      () => {
+        if (isInitialRender) {
+          // Switch off the native scroll restoration behavior and handle it manually
+          // https://developers.google.com/web/updates/2015/09/history-api-scroll-restoration
+          if (window.history && 'scrollRestoration' in window.history) {
+            window.history.scrollRestoration = 'manual';
+          }
+
+          const elem = document.getElementById('css');
+          if (elem) elem.parentNode.removeChild(elem);
+          return;
+        }
+
+        document.title = route.title;
+
+        updateMeta('description', route.description);
+        // Update necessary tags in <head> at runtime here, ie:
+        // updateMeta('keywords', route.keywords);
+        // updateCustomMeta('og:url', route.canonicalUrl);
+        // updateCustomMeta('og:image', route.imageUrl);
+        // updateLink('canonical', route.canonicalUrl);
+        // etc.
+
+        let scrollX = 0;
+        let scrollY = 0;
+        const pos = scrollPositionsHistory[location.key];
+        if (pos) {
+          scrollX = pos.scrollX;
+          scrollY = pos.scrollY;
+        } else {
+          const targetHash = location.hash.substr(1);
+          if (targetHash) {
+            const target = document.getElementById(targetHash);
+            if (target) {
+              scrollY = window.pageYOffset + target.getBoundingClientRect().top;
+            }
           }
         }
-      `,
-      }),
-    }
 
-    if (this.getCookie('id_token')) {
-      console.log("cookie exist----------------")
-      options.headers = {
-        "Authorization": "Bearer " + this.getCookie('id_token'),
-      }
-    }
+        // Restore the scroll position if it was saved into the state
+        // or scroll to the given #hash anchor
+        // or scroll to top of the page
+        window.scrollTo(scrollX, scrollY);
 
-    const resp = await this.context.fetch('/graphql', options );
-
-    const { data ,errors} = await resp.json();
-    console.log(data);
-    console.log(errors);
-  }
-
-  render() {
-    return (
-    <div className={s.root}>
-        <div className={s.container}>
-          <h1>{this.props.title}</h1>
-          <p className={s.lead}>
-            Log in with your username or company email address.
-          </p>
-            <div className={s.formGroup}>
-              <label className={s.label} htmlFor="usernameOrEmail">
-                Username or email address:
-                <input
-                  className={s.input}
-                  id="usernameOrEmail"
-                  type="text"
-                  name="usernameOrEmail"
-                  autoFocus // eslint-disable-line jsx-a11y/no-autofocus
-                />
-              </label>
-            </div>
-            <div className={s.formGroup}>
-              <label className={s.label} htmlFor="password">
-                Password:
-                <input
-                  className={s.input}
-                  id="password"
-                  type="password"
-                  name="password"
-                />
-              </label>
-            </div>
-            <div className={s.formGroup}>
-              <button className={s.button} onClick={this.handleSubmit}>
-                Log in
-              </button>
-            </div>
-        </div>
-      </div>
+        // Google Analytics tracking. Don't send 'pageview' event after
+        // the initial rendering, as it was already sent
+        if (window.ga) {
+          window.ga('send', 'pageview', createPath(location));
+        }
+      },
     );
+  } catch (error) {
+    if (__DEV__) {
+      throw error;
+    }
+
+    console.error(error);
+
+    // Do a full page reload if error occurs during client-side navigation
+    if (!isInitialRender && currentLocation.key === location.key) {
+      console.error('RSK will reload your page after error');
+      window.location.reload();
+    }
   }
 }
 
-export default withStyles(s)(Login);
+// Handle client-side navigation by using HTML5 History API
+// For more information visit https://github.com/mjackson/history#readme
+history.listen(onLocationChange);
+onLocationChange(currentLocation);
+
+// Enable Hot Module Replacement (HMR)
+if (module.hot) {
+  module.hot.accept('./router', () => {
+    if (appInstance && appInstance.updater.isMounted(appInstance)) {
+      // Force-update the whole tree, including components that refuse to update
+      deepForceUpdate(appInstance);
+    }
+
+    onLocationChange(currentLocation);
+  });
+}
