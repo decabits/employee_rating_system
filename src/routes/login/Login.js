@@ -47,7 +47,7 @@ class Login extends React.Component {
     }
 
     if (this.getCookie('id_token')) {
-      console.log("cookie exist----------------")
+      console.log("cookie exist ---------------- ");
       options.headers = {
         "Authorization": "Bearer " + this.getCookie('id_token'),
       }
