@@ -123,3 +123,15 @@ CREATE POLICY peer_ratings ON ratings TO employee
 GRANT USAGE, SELECT, UPDATE ON SEQUENCE user_peers_id_seq TO admin;
 GRANT USAGE, SELECT, UPDATE ON SEQUENCE ratings_id_seq TO admin;
 GRANT USAGE, SELECT, UPDATE ON SEQUENCE ratings_id_seq TO employee;
+
+CREATE OR REPLACE function get_user()
+RETURNS users AS $$
+  SELECT id, name ,email, password, user_type
+  FROM users
+  WHERE id = current_user_id()
+$$
+language sql;
+
+GRANT EXECUTE ON FUNCTION get_user() TO anonymous;
+GRANT EXECUTE ON FUNCTION get_user() TO employee;
+GRANT EXECUTE ON FUNCTION get_user() TO admin;
